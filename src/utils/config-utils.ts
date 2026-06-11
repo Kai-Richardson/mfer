@@ -4,6 +4,7 @@ import * as os from "os";
 import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
 import chalk from "chalk";
 import { spawn } from "child_process";
+import { expandHomePath } from "./file-utils.js";
 
 export interface MfeMode {
   mode_name: string;
@@ -26,17 +27,63 @@ export interface MferConfig {
   mfes?: {
     [mfeName: string]: MfeConfig;
   };
+  hooks?: {
+    post_run?: string;
+    pre_run?: string;
+  };
 }
 
-export const configPath: string = path.join(os.homedir(), ".mfer/config.toml");
+const getCliOptionValue = (optionName: string): string | undefined => {
+  const exactMatchIndex = process.argv.findIndex((arg) => arg === optionName);
+  if (exactMatchIndex >= 0) {
+    return process.argv[exactMatchIndex + 1];
+  }
+
+  const inlineMatch = process.argv.find((arg) =>
+    arg.startsWith(`${optionName}=`),
+  );
+  return inlineMatch?.split("=")[1];
+};
+
+const resolvedConfigPath = (): string => {
+  const pathFromCli = getCliOptionValue("--config");
+  const pathFromEnv = process.env.MFER_CONFIG;
+  const configPathOverride = pathFromCli || pathFromEnv;
+
+  if (!configPathOverride) {
+    return path.join(os.homedir(), ".mfer/config.toml");
+  }
+
+  const expandedConfigPath = expandHomePath(configPathOverride);
+  return path.isAbsolute(expandedConfigPath)
+    ? expandedConfigPath
+    : path.resolve(expandedConfigPath);
+};
+
+export const configPath: string = resolvedConfigPath();
 export const legacyYamlConfigPath: string = path.join(
-  os.homedir(),
-  ".mfer/config.yaml",
+  path.dirname(configPath),
+  "config.yaml",
 );
 export const configExists: boolean = fs.existsSync(configPath);
 export const legacyYamlConfigExists: boolean =
   fs.existsSync(legacyYamlConfigPath);
 export let currentConfig: MferConfig;
+
+const normalizeConfigPaths = (config: MferConfig): MferConfig => {
+  const normalizedConfig: MferConfig = {
+    ...config,
+    mfe_directory: expandHomePath(config.mfe_directory),
+  };
+
+  if (normalizedConfig.lib_directory) {
+    normalizedConfig.lib_directory = expandHomePath(
+      normalizedConfig.lib_directory,
+    );
+  }
+
+  return normalizedConfig;
+};
 
 /**
  * Loads a configuration file from the user's home directory.
@@ -45,7 +92,8 @@ export let currentConfig: MferConfig;
 export const loadConfig = (): MferConfig | undefined => {
   if (configExists) {
     const configFile = fs.readFileSync(configPath, "utf8");
-    currentConfig = parseToml(configFile) as unknown as MferConfig;
+    const parsedConfig = parseToml(configFile) as unknown as MferConfig;
+    currentConfig = normalizeConfigPaths(parsedConfig);
     return currentConfig;
   }
   return undefined;
@@ -111,6 +159,23 @@ export const isParsedConfigValid = (parsed: unknown): boolean => {
             return false;
           }
         }
+      }
+    }
+  }
+
+  if (config.hooks !== undefined) {
+    if (!config.hooks || typeof config.hooks !== "object") {
+      return false;
+    }
+
+    const hooksConfig = config.hooks as Record<string, unknown>;
+    for (const [hookName, hookCommand] of Object.entries(hooksConfig)) {
+      if (typeof hookCommand !== "string" || hookCommand.trim() === "") {
+        return false;
+      }
+
+      if (!["pre_run", "post_run"].includes(hookName)) {
+        return false;
       }
     }
   }

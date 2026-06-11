@@ -10,6 +10,7 @@ import path from "path";
 import {
   promptForMFESelection,
   resolveRunCommand,
+  runLifecycleHook,
 } from "../utils/command-utils.js";
 import { spawn } from "child_process";
 
@@ -139,6 +140,12 @@ const runCommand = new Command("run")
       ),
     );
 
+    await runLifecycleHook(currentConfig.hooks?.pre_run, "pre_run", {
+      groupName,
+      mfeDirectory: mfeDir,
+      selectedMfes: selectedMFEs,
+    });
+
     // If async execution is requested or no custom command is used (default/mode)
     if (isAsync || !options.command) {
       await runConcurrently(mfeCommands, mfeDir);
@@ -146,6 +153,12 @@ const runCommand = new Command("run")
       // Use sequential execution for custom commands (default behavior)
       await runSequentially(mfeCommands, mfeDir);
     }
+
+    await runLifecycleHook(currentConfig.hooks?.post_run, "post_run", {
+      groupName,
+      mfeDirectory: mfeDir,
+      selectedMfes: selectedMFEs,
+    });
   });
 
 /**

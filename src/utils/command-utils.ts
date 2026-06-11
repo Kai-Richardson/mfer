@@ -8,6 +8,39 @@ import type { MferConfig } from "./config-utils.js";
 
 export const DEFAULT_RUN_COMMAND = "npm start";
 
+export async function runLifecycleHook(
+  hookCommand: string | undefined,
+  hookName: "pre_run" | "post_run",
+  options: {
+    groupName: string;
+    mfeDirectory: string;
+    selectedMfes: string[];
+  },
+): Promise<void> {
+  if (!hookCommand) {
+    return;
+  }
+
+  const result = spawnSync(hookCommand, {
+    cwd: options.mfeDirectory,
+    env: {
+      ...process.env,
+      MFER_GROUP_NAME: options.groupName,
+      MFER_HOOK_NAME: hookName,
+      MFER_MFE_DIRECTORY: options.mfeDirectory,
+      MFER_SELECTED_MFES: options.selectedMfes.join(","),
+    },
+    shell: true,
+    stdio: "inherit",
+  });
+
+  if (result.status !== 0) {
+    throw new Error(
+      `Hook '${hookName}' failed with exit code ${result.status}`,
+    );
+  }
+}
+
 /**
  * Resolves the run command for a given MFE based on an optional mode name.
  * Returns the command defined for the mode in the MFE's config, or falls back

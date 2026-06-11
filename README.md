@@ -131,6 +131,7 @@ Run micro frontend applications concurrently.
 - `-a, --async`: Run custom command concurrently instead of sequentially (only with `--command`)
 - `-m, --mode <mode_name>`: Run MFEs using a named mode from config (see [Per-MFE Run Modes](#per-mfe-run-modes))
 - `-s, --select`: Prompt to select which micro frontends to run
+- `--config <path>`: Use a specific config file path (overrides default config location)
 
 > **Note:** `--mode` and `--command` are mutually exclusive.
 
@@ -145,6 +146,7 @@ mfer run --command "npm ci" home  # Run custom command sequentially on home grou
 mfer run -c "yarn install" shared # Run yarn install sequentially on shared group
 mfer run --command "npm ci" --async home  # Run custom command concurrently on home group
 mfer run --command "npm run build" --select  # Select MFEs and run build sequentially
+mfer run --config ./mfer.config.toml --select  # Use project-local config and select MFEs
 ```
 
 ### `mfer pull [group_name]`
@@ -359,7 +361,15 @@ mfer lib install my-design-system --select # Select libraries from specific libr
 
 ## ⚙️ Configuration
 
-mfer uses a TOML configuration file located at `~/.mfer/config.toml`. Here's an example structure:
+mfer uses a TOML configuration file. Default location: `~/.mfer/config.toml`
+
+Override options (highest precedence first):
+
+- CLI: `mfer --config ./path/to/config.toml ...`
+- Env: `MFER_CONFIG=./path/to/config.toml`
+- Default: `~/.mfer/config.toml`
+
+Here's an example structure:
 
 ```toml
 base_github_url = "https://github.com/your-username"
@@ -376,6 +386,11 @@ admin = ["my-admin-panel", "my-shared-components"]
 [[mfes.my-main-app.modes]]
 mode_name = "mock"
 command = "npm run start:mocked"
+
+# optional lifecycle hooks for `mfer run`
+[hooks]
+pre_run = "echo preparing run for $MFER_GROUP_NAME"
+post_run = "echo completed run for $MFER_GROUP_NAME"
 ```
 
 > **Migrating from v3.x?** v4.0.0 is a breaking change: YAML config is no longer supported. Run `mfer config migrate` to convert your existing `~/.mfer/config.yaml` to TOML automatically.
@@ -393,6 +408,9 @@ command = "npm run start:mocked"
   - **`modes`**: Array of named run modes for the MFE. Each mode has:
     - **`mode_name`**: Name used with `mfer run --mode <name>`
     - **`command`**: The command to run for this MFE when the mode is active
+- **`hooks`**: Optional run lifecycle hooks
+  - **`pre_run`**: Command executed before `mfer run` starts MFE processes
+  - **`post_run`**: Command executed after `mfer run` finishes successfully
 
 ### Per-MFE Run Modes
 
@@ -421,6 +439,17 @@ mfer run --mode mock
 - MFEs that **do not** have the mode defined silently fall back to `npm start`.
 - If **no MFE** in the group has the requested mode, a warning is printed but the command still runs (all MFEs use `npm start`).
 - `--mode` cannot be combined with `--command`; they are mutually exclusive.
+
+### Run Lifecycle Hooks
+
+When configured, `pre_run` and `post_run` hooks run in the configured `mfe_directory`.
+
+Environment variables provided to hooks:
+
+- `MFER_HOOK_NAME` (`pre_run` or `post_run`)
+- `MFER_GROUP_NAME` (resolved group name)
+- `MFER_MFE_DIRECTORY` (configured mfe root directory)
+- `MFER_SELECTED_MFES` (comma-separated selected MFEs)
 
 ### Editing Configuration
 

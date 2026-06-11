@@ -21,6 +21,10 @@ program
   .description(
     "Micro Frontend Runner (mfer) - A CLI for running your project's micro frontends.",
   )
+  .option(
+    "--config <path>",
+    "path to config.toml (overrides ~/.mfer/config.toml)",
+  )
   .version(getInstalledVersion(), "-v, --version", "mfer CLI version")
   .hook("preAction", () => {
     console.log();
